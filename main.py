@@ -1,7 +1,45 @@
-import asyncio
 import os
-import sys
 import subprocess
+import sys
+
+
+def install_requirements():
+    if not os.path.isfile('requirements.txt'):
+        print("requirements.txt not found")
+        return
+
+    required_packages = []
+    with open('requirements.txt', 'r') as file:
+        for line in file:
+            package = line.strip()
+            if package:
+                required_packages.append(package)
+
+    packages_to_install = []
+    for package in required_packages:
+        package_name = package.split('==')[0]
+        result = subprocess.run([sys.executable, '-m', 'pip', 'show', package_name], stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            packages_to_install.append(package)
+
+    if packages_to_install:
+        print(f"Installing packages: {', '.join(packages_to_install)}")
+        try:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', *packages_to_install])
+            print("Packages installed successfully")
+        except subprocess.CalledProcessError as e:
+            print(f"Error installing packages: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+    else:
+        print("All required packages are already installed")
+
+
+# Install requirements before importing other modules
+install_requirements()
+
+import asyncio
 import httpx
 import random
 import time
@@ -42,26 +80,11 @@ games = {
 EVENTS_DELAY = 20000 / 1000  # converting milliseconds to seconds
 
 
-def install_requirements():
-    try:
-        # Check if requirements.txt file exists
-        if not os.path.isfile('requirements.txt'):
-            print("requirements.txt not found")
-            return
-        
-        # Install the requirements
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt'])
-        print("Packages installed successfully")
-    
-    except subprocess.CalledProcessError as e:
-        print(f"Error installing packages: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-
 async def generate_client_id():
     timestamp = int(time.time() * 1000)
     random_numbers = ''.join(str(random.randint(0, 9)) for _ in range(19))
     return f"{timestamp}-{random_numbers}"
+
 
 async def login(client_id, app_token):
     async with httpx.AsyncClient() as client:
@@ -72,6 +95,7 @@ async def login(client_id, app_token):
         response.raise_for_status()
         data = response.json()
         return data['clientToken']
+
 
 async def emulate_progress(client_token, promo_id):
     async with httpx.AsyncClient() as client:
@@ -84,6 +108,7 @@ async def emulate_progress(client_token, promo_id):
         data = response.json()
         return data['hasCode']
 
+
 async def generate_key(client_token, promo_id):
     async with httpx.AsyncClient() as client:
         response = await client.post(
@@ -94,6 +119,7 @@ async def generate_key(client_token, promo_id):
         response.raise_for_status()
         data = response.json()
         return data['promoCode']
+
 
 async def generate_key_process(app_token, promo_id):
     client_id = await generate_client_id()
@@ -119,14 +145,15 @@ async def generate_key_process(app_token, promo_id):
         logger.error(f"Failed to generate key: {e.response.json()}")
         return None
 
+
 async def main(game_choice, key_count):
     game = games[game_choice]
     tasks = [generate_key_process(game['appToken'], game['promoId']) for _ in range(key_count)]
     keys = await asyncio.gather(*tasks)
     return [key for key in keys if key], game['name']
 
+
 if __name__ == "__main__":
-    install_requirements()
     print("Select a game:")
     for key, value in games.items():
         print(f"{key}: {value['name']}")
